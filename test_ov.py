@@ -1,11 +1,12 @@
 import openvino as ov
 core = ov.Core()
-ov_model=core.read_model("MiniCPM3-4B-ov/openvino_model.xml")
+ov_model=core.read_model("MiniCPM3-4B-ov/language_model.xml")
 
 
 from transformers import AutoTokenizer, AutoConfig
 import torch
 from optimum.intel import OVModelForCausalLM
+from minicpmv3_helper import OVMINICPM3
 
 model_dir = "MiniCPM3-4B-ov"
 device = "cpu"
@@ -25,13 +26,7 @@ inputs = tokenizer.apply_chat_template(messages,
                                        trust_remote_code=False)
 
 print("====Compiling model====")
-ov_model = OVModelForCausalLM.from_pretrained(
-    model_dir,
-    device="CPU",
-    ov_config=None,
-    config=AutoConfig.from_pretrained(model_dir),
-    trust_remote_code=False,
-)
+ov_model = OVMINICPM3(model_dir)
 print("====Compiled model====")
 ans=ov_model.generate(**inputs)
 print(tokenizer.batch_decode(ans))
