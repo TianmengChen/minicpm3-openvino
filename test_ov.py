@@ -4,7 +4,13 @@ from pathlib import Path
 from ov_minicpm3 import OVMiniCPM3ForCausalLM, MiniCPM3_OV
 from transformers import TextStreamer
 import time
-        
+
+# core = ov.Core()
+# ov_model = core.compile_model("MiniCPM3-4B-ov/llm_stateful.xml")
+# runtime_model = ov_model.get_runtime_model()
+# ov.save_model(runtime_model, "exec.xml")
+
+# exit()       
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser("Export InternVL2 Model to IR", add_help=True)
@@ -59,14 +65,14 @@ if __name__ == '__main__':
             {"role": "user", "content": "推荐5个北京的景点。"},
         ]
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
-        breakpoint()
+        # breakpoint()
 
         inputs_embeds = minicpm3_model.get_input_embeds(input_ids=input_ids)
-        breakpoint()
+        # breakpoint()
         model_outputs = minicpm3_model.generate(
             inputs_embeds=inputs_embeds,
         )
-        breakpoint()
+        # breakpoint()
         output_token_ids = [
             model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
         ]

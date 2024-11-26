@@ -254,6 +254,9 @@ class InsertSlice(MatcherPass):
                 return True
 
         self.register_matcher(Matcher(param,"InsertSlice"), callback)
+
+
+
 class LlmStatefulModel():
     def __init__(
         self,
@@ -303,58 +306,39 @@ class LlmStatefulModel():
 
     def convert_sdpa_ov(self):
         llm_model = self.get_model()        
-        attention_mask = torch.ones(1, 16)
 
-        llm_input = torch.rand(( 1, 16, 2560), dtype=torch.float32)
-        pkv = llm_model(inputs_embeds=llm_input, attention_mask=attention_mask, use_cache=True, return_dict=False)[1]
-        breakpoint()
-        attention_mask = torch.ones(1, 16*2)
+        pkv = llm_model.model(input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
+            73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64),
+                            position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
+                            attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
+
+        attention_mask = torch.ones(1, 17)
         import numpy as np
-        position_ids = torch.tensor([[16*2-1]])
+        position_ids = torch.tensor([[17-1]])
 
         llm_model.config.torchscript = True
         ov_model = ov.convert_model(
             llm_model,
             example_input={
-                "inputs_embeds":  llm_input,
+                "inputs_embeds":  torch.randn(( 1, 1, 2560), dtype=torch.float32),
                 "attention_mask": attention_mask,
                 "position_ids": position_ids,
                 "past_key_values": pkv,
              },
         )
-
-        # pkv = llm_model.model(input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
-        #     73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64),
-        #                     position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
-        #                     attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
-
-        # attention_mask = torch.ones(1, 17)
-        # import numpy as np
-        # position_ids = torch.tensor([[17-1]])
-
-        # llm_model.config.torchscript = True
-        # ov_model = ov.convert_model(
-        #     llm_model,
-        #     example_input={
-        #         "inputs_embeds":  torch.randn(( 1, 1, 2560), dtype=torch.float32),
-        #         "attention_mask": attention_mask,
-        #         "position_ids": position_ids,
-        #         "past_key_values": pkv,
-        #      },
-        # )
-        # print("stateful model inputs: ", ov_model.inputs)
-        breakpoint()
+        print("stateful model inputs: ", ov_model.inputs)
+        # breakpoint()
         for input, input_name in zip(ov_model.inputs, self.get_input_names()):
             input.get_tensor().set_names({input_name})
         for output, output_name in zip(ov_model.outputs, self.get_output_names()):
             output.get_tensor().set_names({output_name})
 
-        patch_stateful(ov_model)
+        # patch_stateful(ov_model)
         # manager = Manager()
         # manager.register_pass(InsertSlice())
         # manager.run_passes(ov_model)
 
-        ov.save_model(ov_model, Path(f"{self.ov_model_path}/llm_stateful.xml"))
+        ov.save_model(ov_model, Path(f"{self.ov_model_path}/llm_pkv.xml"))
         self.save_tokenizer(self.tokenizer, self.ov_model_path)
         self.model.config.save_pretrained(self.ov_model_path)
 
@@ -367,6 +351,50 @@ class LlmStatefulModel():
             ov_compressed_model = nncf.compress_weights(ov_model, **compression_configuration)
             ov.save_model(ov_compressed_model, Path(f"{self.ov_model_path}/llm_stateful_int4.xml"))
     
+
+class LlmModel(LlmStatefulModel):
+    def __init__(
+        self,
+        model=None,
+        tokenizer=None,
+        ov_model_path=None,
+        device='CPU',
+        fp16=False,
+        int4_compress=False,
+    ):
+        super().__init__(model, tokenizer, ov_model_path, device, fp16, int4_compress)
+
+    def get_input_names(self):
+        inputs = ['attention_mask', 'position_ids', 'inputs_embeds']
+        return inputs
+
+    def convert_sdpa_ov(self):
+        llm_model = self.get_model()      
+        attention_mask = torch.ones(1, 16)
+
+        llm_input = torch.rand((1, 16, 2560), dtype=torch.float32)
+        pkv = None
+        # pkv = llm_model(inputs_embeds=llm_input, attention_mask=attention_mask, use_cache=True, return_dict=False)[1]
+        # breakpoint()
+        attention_mask = torch.ones(1, 16)
+        import numpy as np
+        position_ids = torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]])
+
+        llm_model.config.torchscript = True
+        ov_model = ov.convert_model(
+            llm_model,
+            example_input={
+                "inputs_embeds":  llm_input,
+                "attention_mask": attention_mask,
+                "position_ids": position_ids,
+             },
+        )
+        for input, input_name in zip(ov_model.inputs, self.get_input_names()):
+            input.get_tensor().set_names({input_name})
+        for output, output_name in zip(ov_model.outputs, self.get_output_names()):
+            output.get_tensor().set_names({output_name})
+        ov.save_model(ov_model, Path(f"{self.ov_model_path}/llm_nopkv.xml"))
+
 class LlmEmbdModel():
     def __init__(
         self,
@@ -410,7 +438,7 @@ class LlmEmbdModel():
                 "input":  input_ids,
              },
         )
-        breakpoint()
+        # breakpoint()
         for input, input_name in zip(ov_model.inputs, self.get_input_names()):
             input.get_tensor().set_names({input_name})
         for output, output_name in zip(ov_model.outputs, self.get_output_names()):
@@ -425,7 +453,8 @@ class MiniCPM3_OV:
         if model is None and pretrained_model_path:        
             self.model = AutoModelForCausalLM.from_pretrained(
                 pretrained_model_path,
-                trust_remote_code=True
+                trust_remote_code=True,
+                _attn_implementation='sdpa',
             )
             self.tokenizer = AutoTokenizer.from_pretrained(
                 pretrained_model_path, 
@@ -439,10 +468,13 @@ class MiniCPM3_OV:
 
         self.llm_embed_model = LlmEmbdModel(model=self.model, ov_model_path=ov_model_path, device=device)
         self.llm_stateful_model = LlmStatefulModel(model=self.model, tokenizer= self.tokenizer, ov_model_path=ov_model_path, device=device, int4_compress=self.int4_compress)
+        self.llm_nopkv_model = LlmModel(model=self.model, tokenizer= self.tokenizer, ov_model_path=ov_model_path, device=device, int4_compress=self.int4_compress)
 
     def export_vision_to_ov(self):
         self.llm_embed_model.convert_sdpa_ov()
+        self.llm_nopkv_model.convert_sdpa_ov()
         self.llm_stateful_model.convert_sdpa_ov()
+        
 
 class OVMiniCPM3ForCausalLM(GenerationMixin):
     def __init__(
@@ -472,16 +504,21 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
         if llm_int4_compress:
             self.llm_model = core.read_model(Path(f"{ov_model_path}/llm_stateful_int4.xml"))
         else:
-            self.llm_model = core.read_model(Path(f"{ov_model_path}/llm_stateful.xml"))
-        if llm_int8_quant:
-            self.llm_compiled_model = core.compile_model(self.llm_model, device, config = ov_config)
-        else:
-            self.llm_compiled_model = core.compile_model(self.llm_model, device)
+            self.llm_pkv_model = core.read_model(Path(f"{ov_model_path}/llm_pkv.xml"))
+            self.llm_nopkv_model = core.read_model(Path(f"{ov_model_path}/llm_nopkv.xml"))
             
-        self.llm_request = self.llm_compiled_model.create_infer_request()
+        if llm_int8_quant:
+            self.llm_pkv_compiled_model = core.compile_model(self.llm_pkv_model, device, config = ov_config)
+            self.llm_nopkv_compiled_model = core.compile_model(self.llm_nopkv_model, device, config = ov_config)
+        else:
+            self.llm_pkv_compiled_model = core.compile_model(self.llm_pkv_model, device)
+            self.llm_nopkv_compiled_model = core.compile_model(self.llm_nopkv_model, device)
+            
+        self.llm_pkv_request = self.llm_pkv_compiled_model.create_infer_request()
+        self.llm_nopkv_request = self.llm_nopkv_compiled_model.create_infer_request()
 
-        self.input_names = {key.get_any_name(): idx for idx, key in enumerate(self.llm_model.inputs)}
-        self.output_names = {idx: key for idx, key in enumerate(self.llm_model.outputs)}
+        self.input_names = {key.get_any_name(): idx for idx, key in enumerate(self.llm_pkv_model.inputs)}
+        self.output_names = {idx: key for idx, key in enumerate(self.llm_pkv_model.outputs)}
         self.key_value_input_names = [key for key in list(self.input_names) if key not in ["beam_idx", "inputs_embeds", "attention_mask", "position_ids"]]
         self.key_value_output_names = [key for key in list(self.output_names)[1:]]
         self.stateful = len(self.key_value_input_names) == 0
@@ -503,6 +540,7 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
         self.tokenizer = AutoTokenizer.from_pretrained(ov_model_path, trust_remote_code=True)
 
         self.llm_infer_list = llm_infer_list
+
 
     def can_generate(self):
         """Returns True to validate the check that the model using `GenerationMixin.generate()` can indeed generate."""
@@ -549,46 +587,98 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         """General inference method"""
-        inputs_dict = {}
         if past_key_values is not None:
+            inputs_dict = {}
+            #deal with pkv
+            for idx in range(62):
+                print('shape ', past_key_values[2*idx].shape)
+                print('shape ', past_key_values[2*idx+1].shape)
+                inputs_dict[f"past_key_values.{idx//2}.key"] = past_key_values[2*idx]
+                inputs_dict[f"past_key_values.{idx//2}.value"] = past_key_values[2*idx+1]
+
             inputs_embeds = self.llm_embd_run(input_ids)
             inputs_dict['inputs_embeds'] = inputs_embeds
+
+            inputs_dict["attention_mask"] = attention_mask
+            inputs_dict["position_ids"] = position_ids
+
+            batch_size = inputs_embeds.shape[0]
+            # if "beam_idx" in self.input_names:
+            #     inputs_dict["beam_idx"] = self.next_beam_idx if self.next_beam_idx is not None else np.arange(batch_size, dtype=int)
+
+            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            # print('position_ids: ', inputs_dict['position_ids'])
+            # print('inputs_embeds: ', inputs_dict['inputs_embeds'])
+            # print("beam_idx: ", inputs_dict["beam_idx"])
+            start = time.perf_counter()
+            self.llm_pkv_request.start_async(inputs_dict, share_inputs=True)
+            self.llm_pkv_request.wait()
+            end = time.perf_counter()
+
+            generation_time = (end - start) * 1000
+            self.llm_infer_list.append(generation_time)
+
+            self.past_len += inputs_dict["inputs_embeds"].shape[1]
+            logits=torch.from_numpy(self.llm_nopkv_request.get_tensor("logits").data)
+
+            #deal with pkv
+            past_key_values=[]
+            for index in range(1,125):
+                past_key_values.append(self.llm_nopkv_request.get_output_tensor(index).data)
+            
+            # breakpoint()
+            # print('logits: ', self.llm_request.get_tensor("logits").data)
+            return CausalLMOutputWithPast(
+                loss=None,
+                logits=logits,
+                past_key_values=past_key_values,
+                hidden_states=None,
+                attentions=None,
+            )   
         else:
+
+            inputs_dict = {}
+
             self.past_len = 0
-            self.llm_request.reset_state()
+            self.llm_nopkv_request.reset_state()
+            self.llm_pkv_request.reset_state()
             inputs_dict['inputs_embeds'] = inputs_embeds
 
-        inputs_dict["attention_mask"] = attention_mask
-        inputs_dict["position_ids"] = position_ids
+            inputs_dict["attention_mask"] = attention_mask
+            inputs_dict["position_ids"] = position_ids
 
-        batch_size = inputs_embeds.shape[0]
-        if "beam_idx" in self.input_names:
-            inputs_dict["beam_idx"] = self.next_beam_idx if self.next_beam_idx is not None else np.arange(batch_size, dtype=int)
+            batch_size = inputs_embeds.shape[0]
 
-        print('attention_mask: ', inputs_dict['attention_mask'].shape)
-        print('position_ids: ', inputs_dict['position_ids'])
-        print('inputs_embeds: ', inputs_dict['inputs_embeds'])
-        print("beam_idx: ", inputs_dict["beam_idx"])
-        start = time.perf_counter()
-        self.llm_request.start_async(inputs_dict, share_inputs=True)
-        self.llm_request.wait()
-        end = time.perf_counter()
+            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            # print('position_ids: ', inputs_dict['position_ids'])
+            # print('inputs_embeds: ', inputs_dict['inputs_embeds'])
+            start = time.perf_counter()
+            self.llm_nopkv_request.start_async(inputs_dict, share_inputs=True)
+            self.llm_nopkv_request.wait()
+            end = time.perf_counter()
 
-        generation_time = (end - start) * 1000
-        self.llm_infer_list.append(generation_time)
+            generation_time = (end - start) * 1000
+            self.llm_infer_list.append(generation_time)
 
-        past_key_values = ((),)
-        self.past_len += inputs_dict["inputs_embeds"].shape[1]
+            # past_key_values = ((),)
+            self.past_len += inputs_dict["inputs_embeds"].shape[1]
 
-        breakpoint()
-        print('logits: ', self.llm_request.get_tensor("logits").data)
-        return CausalLMOutputWithPast(
-            loss=None,
-            logits=torch.from_numpy(self.llm_request.get_tensor("logits").data),
-            past_key_values=past_key_values,
-            hidden_states=None,
-            attentions=None,
-        )   
+            logits = torch.from_numpy(self.llm_nopkv_request.get_tensor("logits").data)
+            #deal with pkv
+            past_key_values=[]
+            for index in range(1,125):
+                print("shape: ", self.llm_nopkv_request.get_output_tensor(index).get_shape())
+                past_key_values.append(self.llm_nopkv_request.get_output_tensor(index).data)
+
+            # print('logits: ', self.llm_request.get_tensor("logits").data)
+            return CausalLMOutputWithPast(
+                loss=None,
+                logits=logits,
+                past_key_values=past_key_values,
+                hidden_states=None,
+                attentions=None,
+            )   
+
     
     def prepare_inputs_for_generation(
         self,
