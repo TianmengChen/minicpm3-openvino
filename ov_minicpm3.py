@@ -306,11 +306,11 @@ class LlmStatefulModel():
 
     def convert_sdpa_ov(self):
         llm_model = self.get_model()        
-
-        pkv = llm_model.model(input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
-            73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64),
-                            position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
-                            attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
+        with torch.no_grad():
+            pkv = llm_model.model(input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
+                73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64),
+                                position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
+                                attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
 
         attention_mask = torch.ones(1, 17)
         import numpy as np
@@ -590,11 +590,12 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
         if past_key_values is not None:
             inputs_dict = {}
             #deal with pkv
+            print('------------new round------------')
             for idx in range(62):
-                print('shape ', past_key_values[2*idx].shape)
-                print('shape ', past_key_values[2*idx+1].shape)
-                inputs_dict[f"past_key_values.{idx//2}.key"] = past_key_values[2*idx]
-                inputs_dict[f"past_key_values.{idx//2}.value"] = past_key_values[2*idx+1]
+                # print('shape ', past_key_values[2*idx].shape)
+                # print('shape ', past_key_values[2*idx+1].shape)
+                inputs_dict[f"past_key_values.{idx}.key"] = past_key_values[2*idx]
+                inputs_dict[f"past_key_values.{idx}.value"] = past_key_values[2*idx+1]
 
             inputs_embeds = self.llm_embd_run(input_ids)
             inputs_dict['inputs_embeds'] = inputs_embeds
@@ -606,9 +607,9 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
             # if "beam_idx" in self.input_names:
             #     inputs_dict["beam_idx"] = self.next_beam_idx if self.next_beam_idx is not None else np.arange(batch_size, dtype=int)
 
-            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
-            # print('position_ids: ', inputs_dict['position_ids'])
-            # print('inputs_embeds: ', inputs_dict['inputs_embeds'])
+            print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            print('position_ids: ', inputs_dict['position_ids'])
+            print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
             # print("beam_idx: ", inputs_dict["beam_idx"])
             start = time.perf_counter()
             self.llm_pkv_request.start_async(inputs_dict, share_inputs=True)
@@ -636,7 +637,7 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
                 attentions=None,
             )   
         else:
-
+            print('------------first round------------')
             inputs_dict = {}
 
             self.past_len = 0
@@ -649,9 +650,9 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
 
             batch_size = inputs_embeds.shape[0]
 
-            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
-            # print('position_ids: ', inputs_dict['position_ids'])
-            # print('inputs_embeds: ', inputs_dict['inputs_embeds'])
+            print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            print('position_ids: ', inputs_dict['position_ids'])
+            print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
             start = time.perf_counter()
             self.llm_nopkv_request.start_async(inputs_dict, share_inputs=True)
             self.llm_nopkv_request.wait()
@@ -667,9 +668,9 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
             #deal with pkv
             past_key_values=[]
             for index in range(1,125):
-                print("shape: ", self.llm_nopkv_request.get_output_tensor(index).get_shape())
+                # print("shape: ", self.llm_nopkv_request.get_output_tensor(index).get_shape())
                 past_key_values.append(self.llm_nopkv_request.get_output_tensor(index).data)
-
+            
             # print('logits: ', self.llm_request.get_tensor("logits").data)
             return CausalLMOutputWithPast(
                 loss=None,
