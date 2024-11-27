@@ -590,13 +590,13 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
         if past_key_values is not None:
             inputs_dict = {}
             #deal with pkv
-            print('------------new round------------')
+            # print('------------new round------------')
             for idx in range(62):
                 # print('shape ', past_key_values[2*idx].shape)
                 # print('shape ', past_key_values[2*idx+1].shape)
                 inputs_dict[f"past_key_values.{idx}.key"] = past_key_values[2*idx]
                 inputs_dict[f"past_key_values.{idx}.value"] = past_key_values[2*idx+1]
-
+            # print("input_ids: ", input_ids)
             inputs_embeds = self.llm_embd_run(input_ids)
             inputs_dict['inputs_embeds'] = inputs_embeds
 
@@ -607,9 +607,9 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
             # if "beam_idx" in self.input_names:
             #     inputs_dict["beam_idx"] = self.next_beam_idx if self.next_beam_idx is not None else np.arange(batch_size, dtype=int)
 
-            print('attention_mask: ', inputs_dict['attention_mask'].shape)
-            print('position_ids: ', inputs_dict['position_ids'])
-            print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
+            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            # print('position_ids: ', inputs_dict['position_ids'])
+            # print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
             # print("beam_idx: ", inputs_dict["beam_idx"])
             start = time.perf_counter()
             self.llm_pkv_request.start_async(inputs_dict, share_inputs=True)
@@ -620,14 +620,14 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
             self.llm_infer_list.append(generation_time)
 
             self.past_len += inputs_dict["inputs_embeds"].shape[1]
-            logits=torch.from_numpy(self.llm_nopkv_request.get_tensor("logits").data)
+            logits=torch.from_numpy(self.llm_pkv_request.get_tensor("logits").data)
 
             #deal with pkv
             past_key_values=[]
-            for index in range(1,125):
-                past_key_values.append(self.llm_nopkv_request.get_output_tensor(index).data)
             
-            # breakpoint()
+            for index in range(1,125):
+                past_key_values.append(self.llm_pkv_request.get_output_tensor(index).data)
+
             # print('logits: ', self.llm_request.get_tensor("logits").data)
             return CausalLMOutputWithPast(
                 loss=None,
@@ -637,12 +637,13 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
                 attentions=None,
             )   
         else:
-            print('------------first round------------')
+            # print('------------first round------------')
             inputs_dict = {}
 
             self.past_len = 0
             self.llm_nopkv_request.reset_state()
             self.llm_pkv_request.reset_state()
+            
             inputs_dict['inputs_embeds'] = inputs_embeds
 
             inputs_dict["attention_mask"] = attention_mask
@@ -650,9 +651,9 @@ class OVMiniCPM3ForCausalLM(GenerationMixin):
 
             batch_size = inputs_embeds.shape[0]
 
-            print('attention_mask: ', inputs_dict['attention_mask'].shape)
-            print('position_ids: ', inputs_dict['position_ids'])
-            print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
+            # print('attention_mask: ', inputs_dict['attention_mask'].shape)
+            # print('position_ids: ', inputs_dict['position_ids'])
+            # print('inputs_embeds: ', inputs_dict['inputs_embeds'].shape)
             start = time.perf_counter()
             self.llm_nopkv_request.start_async(inputs_dict, share_inputs=True)
             self.llm_nopkv_request.wait()

@@ -65,14 +65,14 @@ if __name__ == '__main__':
             {"role": "user", "content": "推荐5个北京的景点。"},
         ]
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
-        # breakpoint()
 
         inputs_embeds = minicpm3_model.get_input_embeds(input_ids=input_ids)
-        # breakpoint()
+
         model_outputs = minicpm3_model.generate(
             inputs_embeds=inputs_embeds,
+            **generation_config
         )
-        # breakpoint()
+
         output_token_ids = [
             model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
         ]
