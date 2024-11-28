@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument("-ov", "--ov_ir_dir", required=True, help="output directory for saving model")
     parser.add_argument('-d', '--device', default='CPU', help='inference device')
     parser.add_argument('-p', '--prompt', default="Describe this image.", help='prompt')
-    parser.add_argument('-max', '--max_new_tokens', default=256, help='max_new_tokens')
+    parser.add_argument('-max', '--max_new_tokens', default=512, help='max_new_tokens')
     parser.add_argument('-llm_int4_com', '--llm_int4_compress', action="store_true", help='llm int4 weights compress')
     parser.add_argument('-llm_int8_quant', '--llm_int8_quant', action="store_true", help='llm int8 weights quantize')
     parser.add_argument('-convert_model_only', '--convert_model_only', action="store_true", help='convert model to ov only, do not do inference test')
@@ -21,7 +21,7 @@ if __name__ == '__main__':
     model_id = args.model_id
     ov_model_path = args.ov_ir_dir
     device = args.device
-    max_new_tokens = args.max_new_tokens
+    max_new_tokens = int(args.max_new_tokens)
     question = args.prompt
     llm_int4_compress = args.llm_int4_compress
     llm_int8_quant = args.llm_int8_quant
@@ -56,22 +56,21 @@ if __name__ == '__main__':
                 "do_sample": False,
             }
         messages = [
-            {"role": "user", "content": "推荐5个北京的景点。"},
+            {"role": "user", "content": "你是谁"},
         ]
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
-        breakpoint()
+        # print("input_ids: ", input_ids)
 
         inputs_embeds = minicpm3_model.get_input_embeds(input_ids=input_ids)
-        breakpoint()
         model_outputs = minicpm3_model.generate(
             inputs_embeds=inputs_embeds,
+            **generation_config,
         )
-        breakpoint()
-        output_token_ids = [
-            model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
-        ]
-
-        responses = minicpm3_model.tokenizer.batch_decode(output_token_ids, skip_special_tokens=True)[0]
+        # print("model_outputs: ", model_outputs)
+        # output_token_ids = [
+        #     model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
+        # ]
+        responses = minicpm3_model.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)[0]
         print(responses)
         # question = 'Hello, who are you?'
         # response, history = internvl2_model.chat(None, question, generation_config, history=None, return_history=True)
