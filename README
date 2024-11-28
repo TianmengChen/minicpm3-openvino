@@ -1,5 +1,0 @@
-python3 test_ov.py -m ../MiniCPM3-4B -ov MiniCPM3-4B-ov -convert_model_only
- 
-python3 test_ov.py -m ../MiniCPM3-4B -ov MiniCPM3-4B-ov
- 
- 

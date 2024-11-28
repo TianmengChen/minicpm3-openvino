@@ -4,21 +4,15 @@ from pathlib import Path
 from ov_minicpm3 import OVMiniCPM3ForCausalLM, MiniCPM3_OV
 from transformers import TextStreamer
 import time
-
-# core = ov.Core()
-# ov_model = core.compile_model("MiniCPM3-4B-ov/llm_stateful.xml")
-# runtime_model = ov_model.get_runtime_model()
-# ov.save_model(runtime_model, "exec.xml")
-
-# exit()       
+        
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser("Export InternVL2 Model to IR", add_help=True)
+    parser = argparse.ArgumentParser("Export MiniCPM3-4B Model to IR", add_help=True)
     parser.add_argument("-m", "--model_id", required=False, help="model_id or directory for loading")
     parser.add_argument("-ov", "--ov_ir_dir", required=True, help="output directory for saving model")
     parser.add_argument('-d', '--device', default='CPU', help='inference device')
     parser.add_argument('-p', '--prompt', default="Describe this image.", help='prompt')
-    parser.add_argument('-max', '--max_new_tokens', default=256, help='max_new_tokens')
+    parser.add_argument('-max', '--max_new_tokens', default=512, help='max_new_tokens')
     parser.add_argument('-llm_int4_com', '--llm_int4_compress', action="store_true", help='llm int4 weights compress')
     parser.add_argument('-llm_int8_quant', '--llm_int8_quant', action="store_true", help='llm int8 weights quantize')
     parser.add_argument('-convert_model_only', '--convert_model_only', action="store_true", help='convert model to ov only, do not do inference test')
@@ -27,7 +21,7 @@ if __name__ == '__main__':
     model_id = args.model_id
     ov_model_path = args.ov_ir_dir
     device = args.device
-    max_new_tokens = args.max_new_tokens
+    max_new_tokens = int(args.max_new_tokens)
     question = args.prompt
     llm_int4_compress = args.llm_int4_compress
     llm_int8_quant = args.llm_int8_quant
@@ -64,44 +58,32 @@ if __name__ == '__main__':
         messages = [
             {"role": "user", "content": "你是谁"},
         ]
+        print(messages[0]['content'])
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
+        # print("input_ids: ", input_ids)
 
         inputs_embeds = minicpm3_model.get_input_embeds(input_ids=input_ids)
-
         model_outputs = minicpm3_model.generate(
             inputs_embeds=inputs_embeds,
-            **generation_config
+            **generation_config,
         )
+        # print("model_outputs: ", model_outputs)
 
-        output_token_ids = [
-            model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
-        ]
-
-        responses = minicpm3_model.tokenizer.batch_decode(output_token_ids, skip_special_tokens=True)[0]
+        responses = minicpm3_model.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)[0]
         print(responses)
-        # question = 'Hello, who are you?'
-        # response, history = internvl2_model.chat(None, question, generation_config, history=None, return_history=True)
-        # print(f'User: {question}\nAssistant: {response}')
-        # print("\n")
 
-        # for i in range(2):
-        #     pixel_values = internvl2_model.load_image(picture_path)
 
-        #     generation_config = {
-        #         "bos_token_id": internvl2_model.tokenizer.bos_token_id,
-        #         "pad_token_id": internvl2_model.tokenizer.bos_token_id,
-        #         "max_new_tokens": max_new_tokens,
-        #         "do_sample": False,
-        #     }
+        for i in range(4):
+            model_outputs = minicpm3_model.generate(
+                inputs_embeds=inputs_embeds,
+                **generation_config,
+                )
+            # responses = minicpm3_model.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)[0]
+            # print(responses)
 
-        #     question = '<image>\nPlease describe the image shortly.'
-        #     response = internvl2_model.chat(pixel_values, question, generation_config)
-        #     print(f'User: {question}\nAssistant: {response}')
-
-        #     ## i= 0 is warming up
-        #     if i != 0:
-        #         print("\n")
-        #         print(f"Vision Pre latency: {vision_infer[0]:.2f} ms, Vision encoder latency: {vision_infer[1]:.2f} ms, Vision Post latency: {vision_infer[2]:.2f} ms, Vision Mlp latency: {vision_infer[3]:.2f} ms")
-        #         if len(llm_infer_list) > 1:
-        #             avg_token = sum(llm_infer_list[1:]) / (len(llm_infer_list) - 1)
-        #             print(f"LLM Model First token latency: {llm_infer_list[0]:.2f} ms, Output len: {len(llm_infer_list) - 1}, Avage token latency: {avg_token:.2f} ms")
+        ## i= 0 is warming up
+        if i != 0:
+            print("\n")
+            if len(llm_infer_list) > 1:
+                avg_token = sum(llm_infer_list[1:]) / (len(llm_infer_list) - 1)
+                print(f"LLM Model First token latency: {llm_infer_list[0]:.2f} ms, Output len: {len(llm_infer_list) - 1}, Avage token latency: {avg_token:.2f} ms")
