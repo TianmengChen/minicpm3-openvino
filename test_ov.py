@@ -62,7 +62,7 @@ if __name__ == '__main__':
                 "do_sample": False,
             }
         messages = [
-            {"role": "user", "content": "推荐5个北京的景点。"},
+            {"role": "user", "content": "你是谁"},
         ]
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
 
