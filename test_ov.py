@@ -58,6 +58,7 @@ if __name__ == '__main__':
         messages = [
             {"role": "user", "content": "你是谁"},
         ]
+        print(messages[0]['content'])
         input_ids = minicpm3_model.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
         # print("input_ids: ", input_ids)
 
@@ -67,34 +68,22 @@ if __name__ == '__main__':
             **generation_config,
         )
         # print("model_outputs: ", model_outputs)
-        # output_token_ids = [
-        #     model_outputs[i][len(input_ids[i]):] for i in range(len(input_ids))
-        # ]
+
         responses = minicpm3_model.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)[0]
         print(responses)
-        # question = 'Hello, who are you?'
-        # response, history = internvl2_model.chat(None, question, generation_config, history=None, return_history=True)
-        # print(f'User: {question}\nAssistant: {response}')
-        # print("\n")
 
-        # for i in range(2):
-        #     pixel_values = internvl2_model.load_image(picture_path)
 
-        #     generation_config = {
-        #         "bos_token_id": internvl2_model.tokenizer.bos_token_id,
-        #         "pad_token_id": internvl2_model.tokenizer.bos_token_id,
-        #         "max_new_tokens": max_new_tokens,
-        #         "do_sample": False,
-        #     }
+        for i in range(4):
+            model_outputs = minicpm3_model.generate(
+                inputs_embeds=inputs_embeds,
+                **generation_config,
+                )
+            # responses = minicpm3_model.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)[0]
+            # print(responses)
 
-        #     question = '<image>\nPlease describe the image shortly.'
-        #     response = internvl2_model.chat(pixel_values, question, generation_config)
-        #     print(f'User: {question}\nAssistant: {response}')
-
-        #     ## i= 0 is warming up
-        #     if i != 0:
-        #         print("\n")
-        #         print(f"Vision Pre latency: {vision_infer[0]:.2f} ms, Vision encoder latency: {vision_infer[1]:.2f} ms, Vision Post latency: {vision_infer[2]:.2f} ms, Vision Mlp latency: {vision_infer[3]:.2f} ms")
-        #         if len(llm_infer_list) > 1:
-        #             avg_token = sum(llm_infer_list[1:]) / (len(llm_infer_list) - 1)
-        #             print(f"LLM Model First token latency: {llm_infer_list[0]:.2f} ms, Output len: {len(llm_infer_list) - 1}, Avage token latency: {avg_token:.2f} ms")
+        ## i= 0 is warming up
+        if i != 0:
+            print("\n")
+            if len(llm_infer_list) > 1:
+                avg_token = sum(llm_infer_list[1:]) / (len(llm_infer_list) - 1)
+                print(f"LLM Model First token latency: {llm_infer_list[0]:.2f} ms, Output len: {len(llm_infer_list) - 1}, Avage token latency: {avg_token:.2f} ms")
