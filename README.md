@@ -8,7 +8,6 @@
 
 ```bash
 git clone https://github.com/TianmengChen/minicpm3-openvino.git
-cd minicpm3-openvino && git checkout remotes/origin/zhaohb_minicpm3 -b zhaohb_minicpm3
 pip install --pre -U openvino openvino-tokenizers openvino-genai --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly
 pip install nncf
 pip install transformers==4.44.2
