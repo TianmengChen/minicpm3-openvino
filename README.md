@@ -16,7 +16,8 @@ pip install torch
 pip install torchvision
 
 ```
-### Convert MiniCPM3 model to OpenVINO™ IR(Intermediate Representation) and testing:
+### Convert MiniCPM3 model to OpenVINO™ IR(Intermediate Representation) and testing (Intel(R) Xeon(R) Gold 6252N CPU @ 2.30GHz):
+#### FP16
 ```shell
 cd minicpm3-openvino
 #linux
@@ -33,6 +34,20 @@ OpenVINO version
 
 
 LLM Model First token latency: 185.88 ms, Output len: 34, Avage token latency: 119.80 ms
+```
+#### INT4 compress + INT8 dynamic quant + insertslice opt
+```shell
+python3 test_ov.py -m ../../../MiniCPM3-4B -ov MiniCPM3-4B-ov -llm_int4_com -llm_int8_quant                    
+INFO:nncf:NNCF initialized successfully. Supported frameworks detected: torch, onnx, openvino
+OpenVINO version 
+ 2025.0.0-17426-287ab9883ac
+
+
+你是谁
+你好，我是MiniCPM系列模型，由面壁智能和OpenBMB开源社区开发。详细信息可以在我的简介中找到。
+
+
+LLM Model First token latency: 86.21 ms, Output len: 28, Avage token latency: 55.34 ms
 ```
 ### Note:
 After the command is executed, the IR of OpenVINO will be saved in the directory /path/to/MiniCPM3-4B-ov. If the existence of /path/to/MiniCPM3-4B-ov is detected, the model conversion process will be skipped and the IR of OpenVINO will be loaded directly.
