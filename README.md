@@ -48,6 +48,20 @@ OpenVINO version
 
 LLM Model First token latency: 86.21 ms, Output len: 28, Avage token latency: 55.34 ms
 ```
+### Test with LNL IGPU
+```shell
+python test_ov.py -m MiniCPM3-4B-ov -ov MiniCPM3-4B-ov -d GPU -llm_int4_com -llm_int8_quant
+INFO:nncf:NNCF initialized successfully. Supported frameworks detected: torch, onnx, openvino
+OpenVINO version
+ 2024.6.0-17404-4c0f47d2335-releases/2024/6
+
+
+你是谁
+你好，我是MiniCPM系列模型，由面壁智能和OpenBMB开源社区开发。详细信息可以在我的简介中找到。
+
+
+LLM Model First token latency: 183.88 ms, Output len: 28, Avage token latency: 44.60 ms
+```
 ### Note:
 After the command is executed, the IR of OpenVINO will be saved in the directory /path/to/MiniCPM3-4B-ov. If the existence of /path/to/MiniCPM3-4B-ov is detected, the model conversion process will be skipped and the IR of OpenVINO will be loaded directly.
 
