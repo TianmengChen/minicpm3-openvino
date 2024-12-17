@@ -88,7 +88,9 @@ def fuse_cache_reorder(
 
     if model_has_input_output_name(ov_model, "beam_idx"):
         raise ValueError("Model already has fused cache")
-    input_batch = ov_model.input("inputs_embeds").get_partial_shape()[0]
+    # input_batch = ov_model.input("inputs_embeds").get_partial_shape()[0]
+    input_batch = ov_model.input("input_ids").get_partial_shape()[0]
+    
     beam_idx = opset13.parameter(name="beam_idx", dtype=ov.Type.i32, shape=ov.PartialShape([input_batch]))
     beam_idx.output(0).get_tensor().add_names({"beam_idx"})  # why list is not accepted?
     ov_model.add_parameters([beam_idx])
@@ -113,7 +115,8 @@ def build_state_initializer(ov_model: ov.Model, batch_dim: int):
       batch_dim (int):
           index of dimension corresponding to batch size
     """
-    input_ids = ov_model.input("inputs_embeds")
+    # input_ids = ov_model.input("inputs_embeds")
+    input_ids = ov_model.input("input_ids")
     batch = opset13.gather(
         opset13.shape_of(input_ids, output_type="i64"),
         opset13.constant([0]),
@@ -186,7 +189,7 @@ def make_stateful(
         build_state_initializer(ov_model, batch_dim)
 
 
-def patch_stateful(ov_model):
+def patch_stateful_(ov_model):
     key_value_input_names = [
         key.get_any_name() for key in ov_model.inputs if any("key_values" in key_name for key_name in key.get_names())
     ]
@@ -425,10 +428,11 @@ class LlmStatefulModel():
         return self.model
 
     def get_input_names(self):
-        inputs = ['attention_mask', 'position_ids']
+        inputs = ['input_ids', 'attention_mask', 'position_ids']
+        # inputs = ['attention_mask', 'position_ids']
         for idx in range(len(self.model.model.layers)):
             inputs.extend([f"past_key_values.{idx}.key", f"past_key_values.{idx}.value"])
-        inputs.append('inputs_embeds')
+        # inputs.append('inputs_embeds')
         return inputs
 
     def get_output_names(self):
@@ -450,54 +454,56 @@ class LlmStatefulModel():
             log.error(f'tokenizer loading failed with {e}')
 
     def convert_sdpa_ov(self):
-        llm_model = self.get_model()        
-        attention_mask = torch.ones(1, 16)
+        llm_model = self.get_model()    
+        # attention_mask = torch.ones(1, 16)
 
-        llm_input = torch.rand(( 1, 16, 2560), dtype=torch.float32)
-        pkv = llm_model(inputs_embeds=llm_input, attention_mask=attention_mask, use_cache=True, return_dict=False)[1]
-        # breakpoint()
+        # llm_input = torch.rand(( 1, 16, 2560), dtype=torch.float32)
+        # pkv = llm_model(inputs_embeds=llm_input, attention_mask=attention_mask, use_cache=True, return_dict=False)[1]
+        # # breakpoint()
+        # attention_mask = torch.ones(1, 16*2)
+        # import numpy as np
+        # position_ids = torch.tensor([[16*2-1]])
+
+        # llm_model.config.torchscript = True
+        # ov_model = ov.convert_model(
+        #     llm_model,
+        #     example_input={
+        #         "inputs_embeds":  llm_input,
+        #         "attention_mask": attention_mask,
+        #         "position_ids": position_ids,
+        #         "past_key_values": pkv,
+        #      },
+        # )
+        input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
+            73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64)
+        pkv = llm_model.model(input_ids=input_ids,
+                            position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
+                            attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
+
         attention_mask = torch.ones(1, 16*2)
-        import numpy as np
+        # import numpy as np
         position_ids = torch.tensor([[16*2-1]])
 
         llm_model.config.torchscript = True
         ov_model = ov.convert_model(
             llm_model,
             example_input={
-                "inputs_embeds":  llm_input,
+                "input_ids": input_ids,
                 "attention_mask": attention_mask,
                 "position_ids": position_ids,
                 "past_key_values": pkv,
              },
         )
-
-        # pkv = llm_model.model(input_ids=torch.tensor([[ 73441,  3060,     5,  5147, 59367, 59411,  3083, 59350, 20349,    66,
-        #     73440, 59320,     5, 73441, 16434,     5]]).to(torch.int64),
-        #                     position_ids=torch.tensor([[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15]]).to(torch.int64),
-        #                     attention_mask=torch.ones((1, 16), dtype=torch.int64), use_cache=True, return_dict=False)[1]
-
-        # attention_mask = torch.ones(1, 17)
-        # import numpy as np
-        # position_ids = torch.tensor([[17-1]])
-
-        # llm_model.config.torchscript = True
-        # ov_model = ov.convert_model(
-        #     llm_model,
-        #     example_input={
-        #         "inputs_embeds":  torch.randn(( 1, 1, 2560), dtype=torch.float32),
-        #         "attention_mask": attention_mask,
-        #         "position_ids": position_ids,
-        #         "past_key_values": pkv,
-        #      },
-        # )
         # print("stateful model inputs: ", ov_model.inputs)
         # breakpoint()
         for input, input_name in zip(ov_model.inputs, self.get_input_names()):
             input.get_tensor().set_names({input_name})
         for output, output_name in zip(ov_model.outputs, self.get_output_names()):
             output.get_tensor().set_names({output_name})
-
-        patch_stateful(ov_model)
+        # ov.save_model(ov_model, Path(f"{self.ov_model_path}/llm_stateful_unpatch.xml"))
+        # patch_stateful_(ov_model)
+        from optimum.exporters.openvino.stateful import patch_stateful
+        patch_stateful(llm_model.config, ov_model)
         manager = Manager()
         manager.register_pass(InsertSlice())
         manager.run_passes(ov_model)
@@ -589,11 +595,11 @@ class MiniCPM3_OV:
             block.self_attn.forward = types.MethodType(_wrapper_forward, block.self_attn)
         self.model.eval()
 
-        self.llm_embed_model = LlmEmbdModel(model=self.model, ov_model_path=ov_model_path, device=device)
+        # self.llm_embed_model = LlmEmbdModel(model=self.model, ov_model_path=ov_model_path, device=device)
         self.llm_stateful_model = LlmStatefulModel(model=self.model, tokenizer= self.tokenizer, ov_model_path=ov_model_path, device=device, int4_compress=self.int4_compress)
 
     def export_vision_to_ov(self):
-        self.llm_embed_model.convert_sdpa_ov()
+        # self.llm_embed_model.convert_sdpa_ov()
         self.llm_stateful_model.convert_sdpa_ov()
 
 class OVMiniCPM3ForCausalLM(GenerationMixin):
